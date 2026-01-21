@@ -1,0 +1,7 @@
+venv/
+td-dump-20240724.tgz
+td-dump-20240724.gz/
+__pycache__/
+*.pyc
+.DS_Store
+*.json

@@ -1,0 +1,1258 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Entity Co-occurrence Network</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        body { margin: 0; background: #111; font-family: system-ui, sans-serif; overflow: hidden; }
+        svg { display: block; }
+        #controls {
+            position: fixed; top: 20px; left: 20px;
+            background: rgba(20,20,20,0.95); padding: 20px;
+            border-radius: 12px; color: #fff; width: 300px; z-index: 10;
+        }
+        h1 { margin: 0 0 10px; font-size: 18px; color: #4fc3f7; }
+        .explain { font-size: 12px; color: #888; margin-bottom: 15px; line-height: 1.4; }
+        .stat { font-size: 13px; color: #aaa; margin: 5px 0; }
+        .stat b { color: #fff; }
+        input[type=text] {
+            width: 100%; padding: 10px; margin: 10px 0;
+            background: #222; border: 1px solid #444; border-radius: 6px; color: #fff;
+        }
+        #results { max-height: 150px; overflow-y: auto; }
+        .result { padding: 6px 8px; cursor: pointer; font-size: 13px; color: #ccc; border-radius: 4px; }
+        .result:hover { background: #333; }
+        label { display: block; margin-top: 12px; font-size: 12px; color: #666; }
+        input[type=range] { width: 100%; margin: 8px 0; }
+        #info {
+            position: fixed; bottom: 20px; left: 20px;
+            background: rgba(20,20,20,0.95); padding: 15px;
+            border-radius: 10px; color: #fff; display: none; z-index: 10;
+            max-width: 350px;
+        }
+        #info h3 { margin: 0 0 8px; color: #4fc3f7; font-size: 16px; }
+        #info.locked { border: 2px solid #4fc3f7; }
+        #loading {
+            position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%);
+            color: #4fc3f7; font-size: 18px;
+        }
+        .legend { margin-top: 15px; padding-top: 15px; border-top: 1px solid #333; }
+        .legend-title { font-size: 11px; color: #666; margin-bottom: 8px; }
+        .legend-item { display: flex; align-items: center; margin: 4px 0; font-size: 11px; color: #aaa; }
+        .legend-dot { width: 10px; height: 10px; border-radius: 50%; margin-right: 8px; }
+        #clear-btn {
+            display: none; margin-top: 10px; padding: 8px 16px;
+            background: #4fc3f7; color: #000; border: none; border-radius: 6px;
+            cursor: pointer; font-weight: 600; width: 100%;
+        }
+        #clear-btn:hover { background: #81d4fa; }
+        #connections-list { margin-top: 10px; max-height: 200px; overflow-y: auto; }
+        .conn-item {
+            padding: 4px 0; font-size: 12px; color: #ccc;
+            border-bottom: 1px solid #333; cursor: pointer;
+        }
+        .conn-item:hover { color: #4fc3f7; }
+        .conn-item span { color: #888; }
+        #zoom-controls {
+            position: fixed; bottom: 20px; right: 20px;
+            background: rgba(20,20,20,0.95); padding: 12px;
+            border-radius: 10px; z-index: 10; text-align: center;
+        }
+        #zoom-controls .zoom-title {
+            font-size: 11px; color: #666; margin-bottom: 8px;
+        }
+        #zoom-controls button {
+            width: 40px; height: 40px; margin: 0 4px;
+            background: #333; border: 1px solid #555; border-radius: 8px;
+            color: #fff; font-size: 20px; cursor: pointer;
+            transition: background 0.2s;
+        }
+        #zoom-controls button:hover { background: #4fc3f7; color: #000; }
+        #toxicdocs-btn {
+            display: block; margin-top: 10px; padding: 10px 16px;
+            background: #ff9800; color: #000; border: none; border-radius: 6px;
+            cursor: pointer; font-weight: 600; width: 100%; font-size: 13px;
+        }
+        #toxicdocs-btn:hover { background: #ffb74d; }
+        #isolate-toggle {
+            position: fixed; bottom: 120px; right: 20px;
+            z-index: 10;
+        }
+        #isolate-btn {
+            padding: 12px 24px;
+            background: #333; color: #aaa; border: 1px solid #555; border-radius: 8px;
+            cursor: pointer; font-weight: 600; font-size: 14px;
+            transition: all 0.2s;
+            min-width: 120px;
+        }
+        #isolate-btn:hover { background: #444; color: #fff; }
+        #isolate-btn.active { background: #9c27b0; color: #fff; border-color: #9c27b0; }
+        #list-connections-btn {
+            display: block; margin-top: 8px; padding: 10px 16px;
+            background: #00897b; color: #fff; border: none; border-radius: 6px;
+            cursor: pointer; font-weight: 600; width: 100%; font-size: 13px;
+        }
+        #list-connections-btn:hover { background: #26a69a; }
+        .substance-filter { margin-top: 15px; padding-top: 15px; border-top: 1px solid #333; }
+        .substance-filter .filter-title { font-size: 11px; color: #666; margin-bottom: 8px; }
+        .substance-item { display: flex; align-items: center; margin: 6px 0; font-size: 12px; color: #ccc; cursor: pointer; }
+        .substance-item:hover { color: #fff; }
+        .substance-item input { margin-right: 8px; cursor: pointer; }
+        .substance-item.disabled { color: #555; }
+        #apply-filter {
+            margin-top: 10px; padding: 8px 16px;
+            background: #4fc3f7; color: #000; border: none; border-radius: 6px;
+            cursor: pointer; font-weight: 600; width: 100%; font-size: 12px;
+        }
+        #apply-filter:hover { background: #81d4fa; }
+        #criss-crossers-btn {
+            margin-top: 8px; padding: 10px 16px;
+            background: #e91e63; color: #fff; border: none; border-radius: 6px;
+            cursor: pointer; font-weight: 600; width: 100%; font-size: 12px;
+        }
+        #criss-crossers-btn:hover { background: #f06292; }
+        #criss-crossers-btn.active { background: #ad1457; box-shadow: 0 0 0 2px #e91e63; }
+        .criss-crosser-badge {
+            display: inline-block; background: #e91e63; color: #fff;
+            padding: 2px 6px; border-radius: 4px; font-size: 10px; margin-left: 6px;
+        }
+        .entity-type-badge {
+            display: inline-block; background: #9c27b0; color: #fff;
+            padding: 2px 6px; border-radius: 4px; font-size: 10px; margin-left: 6px;
+        }
+        .entity-type-badge.person { background: #4fc3f7; }
+        .entity-type-badge.org { background: #9c27b0; }
+        .entity-toggle { margin-top: 15px; padding-top: 15px; border-top: 1px solid #333; }
+        .entity-toggle .toggle-title { font-size: 11px; color: #666; margin-bottom: 8px; }
+        .entity-toggle-btns { display: flex; gap: 8px; }
+        .entity-toggle-btn {
+            flex: 1; padding: 8px 12px;
+            background: #333; border: 1px solid #555; border-radius: 6px;
+            color: #ccc; font-size: 11px; cursor: pointer; text-align: center;
+            transition: all 0.2s;
+        }
+        .entity-toggle-btn:hover { background: #444; color: #fff; }
+        .entity-toggle-btn.active { background: #4fc3f7; color: #000; border-color: #4fc3f7; }
+        .entity-toggle-btn.active.org { background: #9c27b0; border-color: #9c27b0; color: #fff; }
+
+        /* Pulsing indicator for searched nodes */
+        @keyframes pulse-ring {
+            0% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.8); opacity: 0.5; }
+            100% { transform: scale(2.5); opacity: 0; }
+        }
+        @keyframes bounce-arrow {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-10px); }
+        }
+        .search-indicator {
+            pointer-events: none;
+        }
+        .pulse-ring {
+            fill: none;
+            stroke: #ffeb3b;
+            stroke-width: 3;
+            animation: pulse-ring 1s ease-out infinite;
+        }
+        .search-arrow {
+            fill: #ffeb3b;
+            animation: bounce-arrow 0.5s ease-in-out infinite;
+        }
+        .search-label {
+            fill: #ffeb3b;
+            font-size: 14px;
+            font-weight: bold;
+            text-anchor: middle;
+        }
+    </style>
+</head>
+<body>
+    <div id="loading">Loading network...<br><span style="font-size:14px;color:#888;">This takes about 30 seconds</span></div>
+    <div id="controls" style="display:none">
+        <h1>Entity Co-occurrence Network</h1>
+        <div class="explain">
+            <b>Connections</b> = entities appearing in the same documents.<br>
+            <b>Thicker lines</b> = more shared documents.<br>
+            <b>Click a node</b> to lock and explore connections.
+        </div>
+        <div class="entity-toggle">
+            <div class="toggle-title">Show Entities:</div>
+            <div class="entity-toggle-btns">
+                <button class="entity-toggle-btn" data-type="all">Both</button>
+                <button class="entity-toggle-btn active" data-type="person">People</button>
+                <button class="entity-toggle-btn" data-type="org">Organizations</button>
+            </div>
+        </div>
+        <div class="stat">People: <b id="pc">0</b> | Orgs: <b id="oc">0</b></div>
+        <div class="stat">Total: <b id="nc">0</b> | Connections: <b id="ec">0</b></div>
+        <input type="text" id="search" placeholder="Search for person or organization...">
+        <div id="results"></div>
+        <label>Min documents: <span id="fv">100</span></label>
+        <input type="range" id="filter" min="5" max="500" value="100">
+        <div class="legend">
+            <div class="legend-title">Document frequency:</div>
+            <div class="legend-item"><div class="legend-dot" style="background:#f44336"></div> 500+</div>
+            <div class="legend-item"><div class="legend-dot" style="background:#ff9800"></div> 100-500</div>
+            <div class="legend-item"><div class="legend-dot" style="background:#ffeb3b"></div> 50-100</div>
+            <div class="legend-item"><div class="legend-dot" style="background:#4caf50"></div> 20-50</div>
+            <div class="legend-item"><div class="legend-dot" style="background:#2196f3"></div> &lt;20</div>
+        </div>
+        <div class="substance-filter">
+            <div class="filter-title">Filter by Substance:</div>
+            <div id="substance-list"></div>
+            <button id="apply-filter">Apply Filter</button>
+            <button id="criss-crossers-btn">Criss-Crossers (2+ substances)</button>
+        </div>
+    </div>
+    <div id="info">
+        <h3 id="iname"></h3>
+        <div class="stat">Documents: <b id="idocs"></b></div>
+        <div class="stat">Connected to: <b id="iconn"></b> entities</div>
+        <div class="stat">Substances: <b id="isubs"></b></div>
+        <button id="toxicdocs-btn">Search in ToxicDocs</button>
+        <button id="list-connections-btn">List All Connections</button>
+        <div id="connections-list"></div>
+        <button id="clear-btn">Clear Selection</button>
+    </div>
+    <div id="isolate-toggle">
+        <button id="isolate-btn">🔓 Unlock</button>
+    </div>
+    <div id="zoom-controls">
+        <div class="zoom-title">Zoom In / Out</div>
+        <button id="zoom-in" title="Zoom In">+</button>
+        <button id="zoom-out" title="Zoom Out">−</button>
+    </div>
+    <svg></svg>
+
+    <script>
+    const width = window.innerWidth, height = window.innerHeight;
+    const svg = d3.select("svg").attr("width", width).attr("height", height);
+    const g = svg.append("g");
+
+    const zoom = d3.zoom().scaleExtent([0.1, 10]).on("zoom", e => g.attr("transform", e.transform));
+    svg.call(zoom);
+
+    let allData, node, link, nodeData, linkData, labels;
+    let lockedNode = null;  // Currently locked/selected node
+    let selectedSubstances = new Set();  // Empty = show all
+    let crissCrossersMode = false;  // Special mode for people in 2+ substances
+    let crissCrosserIds = new Set();  // IDs of people with 2+ substances
+    let currentPersonName = "";  // Store clean name for ToxicDocs search
+    let entityTypeFilter = "person";  // "all", "person", or "org" - default to people only
+    let isFromSearch = false;  // Track if selection came from search (for showing indicator)
+    let isolateMode = false;  // When true, only show selected node's connections
+    let isolateCentralNode = null;  // The central node around which isolate mode is locked
+    let isolateClickedNode = null;  // The currently clicked node within isolate mode (for edge highlighting)
+
+    fetch("network_people.json")
+        .then(r => r.json())
+        .then(data => {
+            allData = data;
+            // Identify criss-crossers (people with 2+ substances)
+            allData.nodes.forEach(n => {
+                if ((n.substances || []).length >= 2) {
+                    crissCrosserIds.add(n.id);
+                }
+            });
+            buildSubstanceFilters();
+            render(100);
+        })
+        .catch(e => document.getElementById("loading").innerHTML = "Error: " + e.message);
+
+    function buildSubstanceFilters() {
+        const container = document.getElementById("substance-list");
+        const substances = allData.substances || [];
+
+        // Add "All" option
+        const allLabel = document.createElement("label");
+        allLabel.className = "substance-item";
+        allLabel.innerHTML = '<input type="checkbox" id="sub-all" checked> All Substances';
+        container.appendChild(allLabel);
+
+        // Add each substance
+        substances.forEach(sub => {
+            const label = document.createElement("label");
+            label.className = "substance-item";
+            label.innerHTML = `<input type="checkbox" data-substance="${sub}"> ${sub}`;
+            container.appendChild(label);
+        });
+
+        // Handle "All" checkbox
+        document.getElementById("sub-all").addEventListener("change", (e) => {
+            const checkboxes = container.querySelectorAll('input[data-substance]');
+            if (e.target.checked) {
+                checkboxes.forEach(cb => cb.checked = false);
+                selectedSubstances.clear();
+            }
+        });
+
+        // Handle individual substance checkboxes
+        container.querySelectorAll('input[data-substance]').forEach(cb => {
+            cb.addEventListener("change", () => {
+                const allCb = document.getElementById("sub-all");
+                const anyChecked = [...container.querySelectorAll('input[data-substance]')].some(c => c.checked);
+                allCb.checked = !anyChecked;
+            });
+        });
+    }
+
+    function getSelectedSubstances() {
+        const container = document.getElementById("substance-list");
+        const checked = [...container.querySelectorAll('input[data-substance]:checked')];
+        return new Set(checked.map(cb => cb.dataset.substance));
+    }
+
+    function render(minDocs) {
+        lockedNode = null;
+        document.getElementById("info").style.display = "none";
+        document.getElementById("info").classList.remove("locked");
+        document.getElementById("clear-btn").style.display = "none";
+
+        const substanceFilter = getSelectedSubstances();
+        const filterBySubstance = substanceFilter.size > 0;
+
+        // Filter nodes by min docs, entity type, and optionally by substance or criss-crossers mode
+        const nodes = allData.nodes.filter(n => {
+            if (n.count < minDocs) return false;
+
+            // Filter by entity type
+            const nodeType = n.type || 'person';
+            if (entityTypeFilter === 'person' && nodeType !== 'person') return false;
+            if (entityTypeFilter === 'org' && nodeType !== 'org') return false;
+
+            if (crissCrossersMode) {
+                // In criss-crossers mode, only show entities with 2+ substances
+                return (n.substances || []).length >= 2;
+            }
+            if (filterBySubstance) {
+                // Node must have at least one of the selected substances
+                const nodeSubs = n.substances || [];
+                return nodeSubs.some(s => substanceFilter.has(s));
+            }
+            return true;
+        });
+
+        const ids = new Set(nodes.map(n => n.id));
+
+        // Filter edges - both endpoints must be visible, and edge must have matching substance
+        const edges = allData.edges.filter(e => {
+            if (!ids.has(e.source) || !ids.has(e.target)) return false;
+            if (filterBySubstance && !crissCrossersMode) {
+                const edgeSubs = e.substances || [];
+                return edgeSubs.some(s => substanceFilter.has(s));
+            }
+            return true;
+        });
+
+        // Count by type
+        const personCount = nodes.filter(n => (n.type || 'person') === 'person').length;
+        const orgCount = nodes.filter(n => (n.type || 'person') === 'org').length;
+
+        document.getElementById("pc").textContent = personCount;
+        document.getElementById("oc").textContent = orgCount;
+        document.getElementById("nc").textContent = nodes.length;
+        document.getElementById("ec").textContent = edges.length;
+        document.getElementById("loading").style.display = "none";
+        document.getElementById("controls").style.display = "block";
+
+        nodeData = nodes.map(n => {
+            const nodeType = n.type || 'person';
+            // Orgs get uniform size, people get variable size based on doc count
+            const radius = nodeType === 'org' ? 12 : (Math.sqrt(n.count) * 0.8 + 4);
+            return {
+                id: n.id,
+                count: n.count,
+                type: nodeType,
+                substances: n.substances || [],
+                r: radius
+            };
+        });
+
+        linkData = edges.map(e => ({
+            source: e.source,
+            target: e.target,
+            weight: e.weight
+        }));
+
+        const maxWeight = d3.max(linkData, d => d.weight) || 1;
+
+        // Adjust force parameters based on what we're showing
+        // Orgs need much more spacing since they're larger and more interconnected
+        const isOrgView = entityTypeFilter === 'org';
+        const chargeStrength = isOrgView ? -800 : -150;
+        const linkDistance = isOrgView ? 250 : 80;
+        const collisionPadding = isOrgView ? 20 : 3;
+
+        const simulation = d3.forceSimulation(nodeData)
+            .force("link", d3.forceLink(linkData).id(d => d.id).distance(linkDistance).strength(0.3))
+            .force("charge", d3.forceManyBody().strength(chargeStrength))
+            .force("center", d3.forceCenter(width / 2, height / 2))
+            .force("collision", d3.forceCollide().radius(d => d.r + collisionPadding))
+            .stop();
+
+        // More iterations for org view to let it settle
+        const iterations = isOrgView ? 500 : 300;
+        for (let i = 0; i < iterations; i++) simulation.tick();
+
+        g.selectAll("*").remove();
+
+        link = g.append("g").selectAll("line").data(linkData).join("line")
+            .attr("x1", d => d.source.x)
+            .attr("y1", d => d.source.y)
+            .attr("x2", d => d.target.x)
+            .attr("y2", d => d.target.y)
+            .attr("stroke", "rgba(255,255,255,0.3)")
+            .attr("stroke-width", d => Math.max(0.5, (d.weight / maxWeight) * 5));
+
+        // Draw nodes - circles for people, rectangles for orgs
+        const nodeGroup = g.append("g").selectAll("g").data(nodeData).join("g")
+            .attr("transform", d => `translate(${d.x},${d.y})`)
+            .attr("cursor", "pointer")
+            .on("mouseover", (e, d) => { if (!lockedNode) showInfo(d, false); })
+            .on("mouseout", () => { if (!lockedNode) hideInfo(); })
+            .on("click", (e, d) => {
+                e.stopPropagation();
+                lockNode(d);
+            });
+
+        // Draw shape based on type - circles for both, different colors
+        nodeGroup.each(function(d) {
+            const el = d3.select(this);
+            el.append("circle")
+                .attr("r", d.r)
+                .attr("fill", d.type === 'org' ? colorOrg(d.count) : color(d.count))
+                .attr("stroke", d.substances.length >= 2 ? "#e91e63" : "none")
+                .attr("stroke-width", d.substances.length >= 2 ? 2 : 0);
+        });
+
+        // Keep reference to nodeGroup for later manipulation
+        node = nodeGroup;
+
+        labels = g.append("g").selectAll("text").data(nodeData.filter(d => d.count > 100)).join("text")
+            .attr("x", d => d.x)
+            .attr("y", d => d.y - d.r - 4)
+            .attr("text-anchor", "middle")
+            .attr("fill", "#fff")
+            .attr("font-size", "11px")
+            .attr("pointer-events", "none")
+            .text(d => d.id);
+
+        // Click on background to unlock (or reset in lock mode)
+        svg.on("click", () => {
+            if (isolateMode && isolateCentralNode) {
+                // In lock mode, clicking background resets to central node (doesn't exit lock)
+                document.getElementById("clear-btn").click();
+            } else if (lockedNode) {
+                lockedNode = null;
+                hideInfo();
+                document.getElementById("info").classList.remove("locked");
+                document.getElementById("clear-btn").style.display = "none";
+            }
+        });
+    }
+
+    function color(c) {
+        // Blue-green palette for people
+        if (c > 500) return "#f44336";
+        if (c > 100) return "#ff9800";
+        if (c > 50) return "#ffeb3b";
+        if (c > 20) return "#4caf50";
+        return "#2196f3";
+    }
+
+    function colorOrg(c) {
+        // Purple palette for organizations
+        if (c > 500) return "#e040fb";
+        if (c > 100) return "#ab47bc";
+        if (c > 50) return "#7e57c2";
+        if (c > 20) return "#5c6bc0";
+        return "#7986cb";
+    }
+
+    function getConnections(d) {
+        return linkData.filter(l =>
+            (l.source.id || l.source) === d.id || (l.target.id || l.target) === d.id
+        );
+    }
+
+    function showInfo(d, isLocked) {
+        const nameEl = document.getElementById("iname");
+        const isCrissCrosser = (d.substances || []).length >= 2;
+        const entityType = d.type || 'person';
+        currentPersonName = d.id;  // Store clean name for ToxicDocs search
+
+        let badges = '';
+        // Add entity type badge
+        badges += `<span class="entity-type-badge ${entityType}">${entityType === 'org' ? 'Organization' : 'Person'}</span>`;
+        // Add criss-crosser badge if applicable
+        if (isCrissCrosser) badges += '<span class="criss-crosser-badge">Criss-Crosser</span>';
+
+        nameEl.innerHTML = d.id + badges;
+        document.getElementById("idocs").textContent = d.count + " documents";
+
+        const connections = getConnections(d);
+        document.getElementById("iconn").textContent = connections.length;
+
+        // Show substances
+        const subs = d.substances || [];
+        document.getElementById("isubs").textContent = subs.length > 0 ? subs.join(", ") : "None";
+
+        // Build connections list
+        const listEl = document.getElementById("connections-list");
+        listEl.innerHTML = "";
+
+        if (isLocked) {
+            const sortedConns = connections
+                .map(l => {
+                    const otherId = (l.source.id || l.source) === d.id
+                        ? (l.target.id || l.target)
+                        : (l.source.id || l.source);
+                    const otherNode = nodeData.find(n => n.id === otherId);
+                    return { id: otherId, weight: l.weight, count: otherNode ? otherNode.count : 0 };
+                })
+                .sort((a, b) => b.weight - a.weight);
+
+            sortedConns.forEach(conn => {
+                const div = document.createElement("div");
+                div.className = "conn-item";
+                div.innerHTML = `${conn.id} <span>(${conn.weight} shared)</span>`;
+                div.onclick = (e) => {
+                    e.stopPropagation();
+                    const targetNode = nodeData.find(n => n.id === conn.id);
+                    if (targetNode) lockNode(targetNode);
+                };
+                listEl.appendChild(div);
+            });
+        }
+
+        document.getElementById("info").style.display = "block";
+
+        // Highlight connected nodes - hide everything else completely
+        const connectedIds = new Set([d.id]);
+        connections.forEach(l => {
+            connectedIds.add(l.source.id || l.source);
+            connectedIds.add(l.target.id || l.target);
+        });
+
+        // Hide non-connected nodes completely
+        node.attr("opacity", n => connectedIds.has(n.id) ? 1 : 0)
+            .attr("pointer-events", n => connectedIds.has(n.id) ? "all" : "none");
+
+        // Hide non-connected edges completely, highlight connected ones
+        link.attr("opacity", l => {
+            const src = l.source.id || l.source;
+            const tgt = l.target.id || l.target;
+            return (src === d.id || tgt === d.id) ? 1 : 0;
+        }).attr("stroke", l => {
+            const src = l.source.id || l.source;
+            const tgt = l.target.id || l.target;
+            return (src === d.id || tgt === d.id) ? "#4fc3f7" : "rgba(255,255,255,0.3)";
+        });
+
+        // Hide non-connected labels
+        labels.attr("opacity", n => connectedIds.has(n.id) ? 1 : 0);
+    }
+
+    function hideInfo() {
+        document.getElementById("info").style.display = "none";
+        document.getElementById("connections-list").innerHTML = "";
+        node.attr("opacity", 1).attr("pointer-events", "all");
+        link.attr("opacity", 1).attr("stroke", "rgba(255,255,255,0.3)");
+        labels.attr("opacity", 1);
+    }
+
+    // Show info for a node clicked in locked network mode (doesn't hide other nodes)
+    function showInfoLocked(d, centralId) {
+        const nameEl = document.getElementById("iname");
+        const isCrissCrosser = (d.substances || []).length >= 2;
+        const entityType = d.type || 'person';
+        currentPersonName = d.id;
+
+        let badges = '';
+        badges += `<span class="entity-type-badge ${entityType}">${entityType === 'org' ? 'Organization' : 'Person'}</span>`;
+        if (isCrissCrosser) badges += '<span class="criss-crosser-badge">Criss-Crosser</span>';
+
+        nameEl.innerHTML = d.id + badges;
+        document.getElementById("idocs").textContent = d.count + " documents";
+
+        // Find the edge between central node and this node for shared docs
+        const edgeToCentral = linkData.find(l => {
+            const src = l.source.id || l.source;
+            const tgt = l.target.id || l.target;
+            return (src === centralId && tgt === d.id) || (tgt === centralId && src === d.id);
+        });
+
+        const sharedDocs = edgeToCentral ? edgeToCentral.weight : 0;
+
+        // Show connections count for this node
+        const connections = getConnections(d);
+        document.getElementById("iconn").textContent = connections.length + (sharedDocs > 0 ? ` (${sharedDocs} shared with ${centralId})` : '');
+
+        const subs = d.substances || [];
+        document.getElementById("isubs").textContent = subs.length > 0 ? subs.join(", ") : "None";
+
+        // Clear connections list (user can click "List All Connections" if needed)
+        document.getElementById("connections-list").innerHTML = "";
+
+        document.getElementById("info").style.display = "block";
+        document.getElementById("info").classList.add("locked");
+        document.getElementById("clear-btn").style.display = "block";
+    }
+
+    function lockNode(d) {
+        lockedNode = d;
+
+        // In criss-crossers mode, expand to show all connections including non-criss-crossers
+        if (crissCrossersMode) {
+            expandCrissCrosserConnections(d);
+            return;
+        }
+
+        // Auto-enter isolate mode when clicking a node
+        isolateMode = true;
+        isolateClickedNode = null;
+        isFromSearch = false;  // No indicator for direct clicks
+
+        // Update button state
+        const btn = document.getElementById("isolate-btn");
+        btn.classList.add("active");
+        btn.textContent = "🔒 Locked";
+
+        // Render isolated view for the clicked node
+        renderIsolated(d.id);
+    }
+
+    function expandCrissCrosserConnections(d) {
+        // Find all connections from the full dataset
+        const minDocs = +document.getElementById("filter").value;
+        const allConnections = allData.edges.filter(e =>
+            e.source === d.id || e.target === d.id
+        );
+
+        // Get all connected node IDs
+        const connectedIds = new Set([d.id]);
+        allConnections.forEach(e => {
+            connectedIds.add(e.source);
+            connectedIds.add(e.target);
+        });
+
+        // Get node data for all connected nodes (including non-criss-crossers)
+        const connectedNodesData = allData.nodes.filter(n =>
+            connectedIds.has(n.id) && n.count >= minDocs
+        );
+
+        // Filter edges to only those between visible nodes
+        const visibleIds = new Set(connectedNodesData.map(n => n.id));
+        const visibleEdges = allConnections.filter(e =>
+            visibleIds.has(e.source) && visibleIds.has(e.target)
+        );
+
+        // Rebuild nodeData and linkData for this expanded view
+        nodeData = connectedNodesData.map(n => {
+            const nodeType = n.type || 'person';
+            const radius = nodeType === 'org' ? 12 : (Math.sqrt(n.count) * 0.8 + 4);
+            return {
+                id: n.id,
+                count: n.count,
+                type: nodeType,
+                substances: n.substances || [],
+                r: radius
+            };
+        });
+
+        linkData = visibleEdges.map(e => ({
+            source: e.source,
+            target: e.target,
+            weight: e.weight
+        }));
+
+        const maxWeight = d3.max(linkData, e => e.weight) || 1;
+
+        // Run force simulation
+        const simulation = d3.forceSimulation(nodeData)
+            .force("link", d3.forceLink(linkData).id(n => n.id).distance(80).strength(0.5))
+            .force("charge", d3.forceManyBody().strength(-150))
+            .force("center", d3.forceCenter(width / 2, height / 2))
+            .force("collision", d3.forceCollide().radius(n => n.r + 3))
+            .stop();
+
+        for (let i = 0; i < 300; i++) simulation.tick();
+
+        // Re-render
+        g.selectAll("*").remove();
+
+        link = g.append("g").selectAll("line").data(linkData).join("line")
+            .attr("x1", e => e.source.x)
+            .attr("y1", e => e.source.y)
+            .attr("x2", e => e.target.x)
+            .attr("y2", e => e.target.y)
+            .attr("stroke", "#4fc3f7")
+            .attr("stroke-width", e => Math.max(0.5, (e.weight / maxWeight) * 5));
+
+        // Draw nodes with different shapes for people vs orgs
+        const nodeGroup = g.append("g").selectAll("g").data(nodeData).join("g")
+            .attr("transform", n => `translate(${n.x},${n.y})`)
+            .attr("cursor", "pointer")
+            .on("mouseover", (e, n) => { if (!lockedNode) showInfo(n, false); })
+            .on("mouseout", () => { if (!lockedNode) hideInfo(); })
+            .on("click", (e, n) => {
+                e.stopPropagation();
+                lockNode(n);
+            });
+
+        nodeGroup.each(function(d) {
+            const el = d3.select(this);
+            el.append("circle")
+                .attr("r", d.r)
+                .attr("fill", d.type === 'org' ? colorOrg(d.count) : color(d.count))
+                .attr("stroke", d.substances.length >= 2 ? "#e91e63" : "none")
+                .attr("stroke-width", d.substances.length >= 2 ? 2 : 0);
+        });
+
+        node = nodeGroup;
+
+        labels = g.append("g").selectAll("text").data(nodeData.filter(n => n.count > 100)).join("text")
+            .attr("x", n => n.x)
+            .attr("y", n => n.y - n.r - 4)
+            .attr("text-anchor", "middle")
+            .attr("fill", "#fff")
+            .attr("font-size", "11px")
+            .attr("pointer-events", "none")
+            .text(n => n.id);
+
+        // Update stats
+        document.getElementById("nc").textContent = nodeData.length;
+        document.getElementById("ec").textContent = linkData.length;
+
+        // Show info for the clicked node
+        const clickedNode = nodeData.find(n => n.id === d.id);
+        if (clickedNode) {
+            showInfo(clickedNode, true);
+            document.getElementById("info").classList.add("locked");
+            document.getElementById("clear-btn").style.display = "block";
+        }
+
+        // Zoom to fit
+        if (nodeData.length > 0) {
+            const xs = nodeData.map(n => n.x);
+            const ys = nodeData.map(n => n.y);
+            const minX = Math.min(...xs) - 50;
+            const maxX = Math.max(...xs) + 50;
+            const minY = Math.min(...ys) - 50;
+            const maxY = Math.max(...ys) + 50;
+
+            const boxWidth = maxX - minX;
+            const boxHeight = maxY - minY;
+            const centerX = (minX + maxX) / 2;
+            const centerY = (minY + maxY) / 2;
+
+            const scale = Math.min(
+                (width - 350) / boxWidth,
+                height / boxHeight,
+                3
+            ) * 0.85;
+
+            const transform = d3.zoomIdentity
+                .translate(width / 2 - centerX * scale, height / 2 - centerY * scale)
+                .scale(scale);
+
+            svg.transition().duration(500).call(zoom.transform, transform);
+        }
+    }
+
+    // Helper function to exit lock mode
+    function exitLockMode() {
+        if (isolateMode) {
+            isolateMode = false;
+            isolateCentralNode = null;
+            isolateClickedNode = null;
+            const btn = document.getElementById("isolate-btn");
+            btn.classList.remove("active");
+            btn.textContent = "🔓 Unlock";
+        }
+    }
+
+    // Clear button
+    document.getElementById("clear-btn").onclick = (e) => {
+        e.stopPropagation();
+
+        if (isolateMode && isolateCentralNode) {
+            // In lock mode, clear just resets to central node view (doesn't exit lock mode)
+            isolateClickedNode = null;
+            lockedNode = isolateCentralNode;
+
+            // Reset edge colors to default
+            link.attr("stroke", "#4fc3f7")
+                .attr("stroke-width", l => {
+                    const maxWeight = d3.max(linkData, e => e.weight) || 1;
+                    return Math.max(0.5, (l.weight / maxWeight) * 5);
+                });
+
+            // Reset node strokes
+            node.select("circle")
+                .attr("stroke", nd => {
+                    if (nd.id === isolateCentralNode.id) return "#fff";
+                    if (nd.substances.length >= 2) return "#e91e63";
+                    return "none";
+                })
+                .attr("stroke-width", nd => {
+                    if (nd.id === isolateCentralNode.id) return 3;
+                    if (nd.substances.length >= 2) return 2;
+                    return 0;
+                });
+
+            // Show info for central node
+            showInfoLocked(isolateCentralNode, isolateCentralNode.id);
+        } else {
+            // Normal mode - full reset
+            lockedNode = null;
+            hideInfo();
+            document.getElementById("info").classList.remove("locked");
+            document.getElementById("clear-btn").style.display = "none";
+
+            // Reset zoom and re-render in current mode
+            svg.transition().duration(500).call(zoom.transform, d3.zoomIdentity);
+            const minDocs = +document.getElementById("filter").value;
+            render(minDocs);
+        }
+    };
+
+    // Search
+    document.getElementById("search").addEventListener("input", e => {
+        const q = e.target.value.toLowerCase();
+        const res = document.getElementById("results");
+        res.innerHTML = "";
+        if (q.length < 2) return;
+
+        allData.nodes
+            .filter(n => n.id.toLowerCase().includes(q))
+            .sort((a, b) => b.count - a.count)
+            .slice(0, 8)
+            .forEach(m => {
+                const div = document.createElement("div");
+                div.className = "result";
+                div.textContent = m.id + " (" + m.count + " docs)";
+                div.onclick = () => {
+                    // Automatically enter isolate mode when selecting from search
+                    isolateMode = true;
+                    isolateClickedNode = null;
+                    isFromSearch = true;  // Show indicator for searched node
+
+                    // Update button state
+                    const btn = document.getElementById("isolate-btn");
+                    btn.classList.add("active");
+                    btn.textContent = "🔒 Locked";
+
+                    // Render isolated view for the selected entity
+                    renderIsolated(m.id);
+
+                    document.getElementById("search").value = "";
+                    res.innerHTML = "";
+                };
+                res.appendChild(div);
+            });
+    });
+
+    // Filter slider
+    const slider = document.getElementById("filter");
+    slider.oninput = () => document.getElementById("fv").textContent = slider.value;
+    slider.onchange = () => {
+        exitLockMode();  // Auto-unlock when changing filter
+        render(+slider.value);
+    };
+
+    // Zoom controls
+    document.getElementById("zoom-in").onclick = () => {
+        svg.transition().duration(300).call(zoom.scaleBy, 1.5);
+    };
+    document.getElementById("zoom-out").onclick = () => {
+        svg.transition().duration(300).call(zoom.scaleBy, 0.67);
+    };
+
+    // ToxicDocs search button
+    document.getElementById("toxicdocs-btn").onclick = (e) => {
+        e.stopPropagation();
+        const searchUrl = "https://www.toxicdocs.org/search?q=" + encodeURIComponent('"' + currentPersonName + '"');
+        window.open(searchUrl, "_blank");
+    };
+
+    // Apply substance filter button
+    document.getElementById("apply-filter").onclick = () => {
+        exitLockMode();  // Auto-unlock when changing filter
+        crissCrossersMode = false;
+        document.getElementById("criss-crossers-btn").classList.remove("active");
+        const minDocs = +document.getElementById("filter").value;
+        render(minDocs);
+    };
+
+    // Criss-Crossers button
+    document.getElementById("criss-crossers-btn").onclick = () => {
+        exitLockMode();  // Auto-unlock when changing mode
+        crissCrossersMode = !crissCrossersMode;
+        document.getElementById("criss-crossers-btn").classList.toggle("active", crissCrossersMode);
+
+        // Uncheck substance filters when entering criss-crossers mode
+        if (crissCrossersMode) {
+            document.getElementById("sub-all").checked = true;
+            document.querySelectorAll('#substance-list input[data-substance]').forEach(cb => cb.checked = false);
+        }
+
+        const minDocs = +document.getElementById("filter").value;
+        render(minDocs);
+    };
+
+    // Entity type toggle buttons
+    document.querySelectorAll('.entity-toggle-btn').forEach(btn => {
+        btn.onclick = () => {
+            exitLockMode();  // Auto-unlock when changing entity type
+
+            // Update active state
+            document.querySelectorAll('.entity-toggle-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            if (btn.dataset.type === 'org') btn.classList.add('org');
+
+            // Update filter
+            entityTypeFilter = btn.dataset.type;
+
+            // Re-render
+            const minDocs = +document.getElementById("filter").value;
+            render(minDocs);
+        };
+    });
+
+    // Isolate mode toggle button
+    document.getElementById("isolate-btn").onclick = (e) => {
+        e.stopPropagation();
+        isolateMode = !isolateMode;
+
+        const btn = document.getElementById("isolate-btn");
+        btn.classList.toggle("active", isolateMode);
+        btn.textContent = isolateMode ? "🔒 Locked" : "🔓 Unlock";
+
+        if (isolateMode && lockedNode) {
+            // Enter lock mode with current selection as central node
+            isolateCentralNode = lockedNode;
+            isolateClickedNode = null;
+            renderIsolated(lockedNode.id);
+        } else if (!isolateMode) {
+            // Exit lock mode - go back to normal view
+            isolateCentralNode = null;
+            isolateClickedNode = null;
+            const minDocs = +document.getElementById("filter").value;
+            render(minDocs);
+        }
+    };
+
+    // Render isolated view for a specific node
+    function renderIsolated(selectedId) {
+        // Find all edges connected to this node from full dataset
+        const connectedEdges = allData.edges.filter(edge =>
+            edge.source === selectedId || edge.target === selectedId
+        );
+
+        // Get all connected node IDs
+        const connectedIds = new Set([selectedId]);
+        connectedEdges.forEach(edge => {
+            connectedIds.add(edge.source);
+            connectedIds.add(edge.target);
+        });
+
+        // Filter to nodes that match current entity type filter
+        // Note: In isolated view, we ignore minDocs for connections - show ALL connections
+        // This ensures users can see the full network of whoever they searched for
+        const filteredNodes = allData.nodes.filter(n => {
+            if (!connectedIds.has(n.id)) return false;
+            // Always include the selected node regardless of filters
+            if (n.id === selectedId) return true;
+            // Only filter by entity type, not by minDocs
+            const nodeType = n.type || 'person';
+            if (entityTypeFilter === 'person' && nodeType !== 'person') return false;
+            if (entityTypeFilter === 'org' && nodeType !== 'org') return false;
+            return true;
+        });
+
+        const visibleIds = new Set(filteredNodes.map(n => n.id));
+
+        // Filter edges to only those between visible nodes
+        const filteredEdges = connectedEdges.filter(e =>
+            visibleIds.has(e.source) && visibleIds.has(e.target)
+        );
+
+        // Build nodeData and linkData
+        nodeData = filteredNodes.map(n => {
+            const nodeType = n.type || 'person';
+            const isCentral = n.id === selectedId;
+            // Make central node larger and more visible
+            let radius = nodeType === 'org' ? 12 : (Math.sqrt(n.count) * 0.8 + 4);
+            if (isCentral) {
+                radius = Math.max(radius, 20);  // Minimum size for central node
+            }
+            return {
+                id: n.id,
+                count: n.count,
+                type: nodeType,
+                substances: n.substances || [],
+                r: radius,
+                // Fix central node at center of viewport
+                fx: isCentral ? width / 2 : undefined,
+                fy: isCentral ? height / 2 : undefined
+            };
+        });
+
+        linkData = filteredEdges.map(e => ({
+            source: e.source,
+            target: e.target,
+            weight: e.weight
+        }));
+
+        const maxWeight = d3.max(linkData, e => e.weight) || 1;
+
+        // Run force simulation with good spacing
+        const simulation = d3.forceSimulation(nodeData)
+            .force("link", d3.forceLink(linkData).id(n => n.id).distance(150).strength(0.3))
+            .force("charge", d3.forceManyBody().strength(-400))
+            .force("center", d3.forceCenter(width / 2, height / 2))
+            .force("collision", d3.forceCollide().radius(n => n.r + 15))
+            .stop();
+
+        for (let i = 0; i < 400; i++) simulation.tick();
+
+        // Re-render
+        g.selectAll("*").remove();
+
+        link = g.append("g").selectAll("line").data(linkData).join("line")
+            .attr("x1", e => e.source.x)
+            .attr("y1", e => e.source.y)
+            .attr("x2", e => e.target.x)
+            .attr("y2", e => e.target.y)
+            .attr("stroke", "#4fc3f7")
+            .attr("stroke-width", e => Math.max(0.5, (e.weight / maxWeight) * 5));
+
+        // Draw nodes with shapes
+        const centralId = isolateCentralNode ? isolateCentralNode.id : selectedId;
+
+        const nodeGroup = g.append("g").selectAll("g").data(nodeData).join("g")
+            .attr("transform", n => `translate(${n.x},${n.y})`)
+            .attr("cursor", "pointer")
+            .on("mouseover", (ev, n) => {
+                // In locked mode, just show a tooltip-style hover, don't hide anything
+                if (!isolateClickedNode) {
+                    // Highlight the hovered node and its edge to central
+                    d3.select(ev.currentTarget).select("circle")
+                        .attr("stroke", "#fff")
+                        .attr("stroke-width", 2);
+                }
+            })
+            .on("mouseout", (ev, n) => {
+                // Reset hover highlight (unless it's clicked or central)
+                if (!isolateClickedNode || isolateClickedNode.id !== n.id) {
+                    const isCentral = n.id === centralId;
+                    const isCrissCrosser = n.substances && n.substances.length >= 2;
+                    d3.select(ev.currentTarget).select("circle")
+                        .attr("stroke", isCentral ? "#fff" : (isCrissCrosser ? "#e91e63" : "none"))
+                        .attr("stroke-width", isCentral ? 3 : (isCrissCrosser ? 2 : 0));
+                }
+            })
+            .on("click", (ev, n) => {
+                ev.stopPropagation();
+                // In lock mode, clicking a node highlights the edge to it (doesn't re-render)
+                isolateClickedNode = n;
+                lockedNode = n;
+                currentPersonName = n.id;
+                showInfoLocked(n, centralId);
+
+                // Reset all edges to default, then highlight the edge to clicked node
+                link.attr("stroke", l => {
+                    const src = l.source.id || l.source;
+                    const tgt = l.target.id || l.target;
+                    // Highlight edge if it connects central node to clicked node
+                    if ((src === centralId && tgt === n.id) || (tgt === centralId && src === n.id)) {
+                        return "#ffeb3b";  // Yellow highlight
+                    }
+                    return "#4fc3f7";  // Default cyan
+                }).attr("stroke-width", l => {
+                    const src = l.source.id || l.source;
+                    const tgt = l.target.id || l.target;
+                    const maxWeight = d3.max(linkData, e => e.weight) || 1;
+                    const baseWidth = Math.max(0.5, (l.weight / maxWeight) * 5);
+                    // Make highlighted edge thicker
+                    if ((src === centralId && tgt === n.id) || (tgt === centralId && src === n.id)) {
+                        return baseWidth + 3;
+                    }
+                    return baseWidth;
+                });
+
+                // Update node strokes to show selection
+                nodeGroup.select("circle")
+                    .attr("stroke", nd => {
+                        if (nd.id === n.id) return "#ffeb3b";  // Clicked node
+                        if (nd.id === centralId) return "#fff";  // Central node
+                        if (nd.substances.length >= 2) return "#e91e63";
+                        return "none";
+                    })
+                    .attr("stroke-width", nd => {
+                        if (nd.id === n.id) return 3;
+                        if (nd.id === centralId) return 3;
+                        if (nd.substances.length >= 2) return 2;
+                        return 0;
+                    });
+            });
+
+        nodeGroup.each(function(d) {
+            const el = d3.select(this);
+            const isCentral = d.id === centralId;
+            el.append("circle")
+                .attr("r", d.r)
+                .attr("fill", d.type === 'org' ? colorOrg(d.count) : color(d.count))
+                .attr("stroke", isCentral ? "#fff" : (d.substances.length >= 2 ? "#e91e63" : "none"))
+                .attr("stroke-width", isCentral ? 3 : (d.substances.length >= 2 ? 2 : 0));
+        });
+
+        node = nodeGroup;
+
+        labels = g.append("g").selectAll("text").data(nodeData).join("text")
+            .attr("x", n => n.x)
+            .attr("y", n => n.y - n.r - 4)
+            .attr("text-anchor", "middle")
+            .attr("fill", "#fff")
+            .attr("font-size", "11px")
+            .attr("pointer-events", "none")
+            .text(n => n.id);
+
+        // Add search indicator if this came from a search
+        if (isFromSearch) {
+            const centralNode = nodeData.find(n => n.id === selectedId);
+            if (centralNode) {
+                const indicator = g.append("g")
+                    .attr("class", "search-indicator")
+                    .attr("transform", `translate(${centralNode.x},${centralNode.y})`);
+
+                // Pulsing rings
+                for (let i = 0; i < 3; i++) {
+                    indicator.append("circle")
+                        .attr("class", "pulse-ring")
+                        .attr("r", centralNode.r + 5)
+                        .style("animation-delay", `${i * 0.3}s`);
+                }
+
+                // Arrow pointing down at the node
+                const arrowY = -centralNode.r - 50;
+                indicator.append("path")
+                    .attr("class", "search-arrow")
+                    .attr("d", `M0,${arrowY} L-10,${arrowY - 20} L-4,${arrowY - 20} L-4,${arrowY - 40} L4,${arrowY - 40} L4,${arrowY - 20} L10,${arrowY - 20} Z`);
+
+                // Label above arrow
+                indicator.append("text")
+                    .attr("class", "search-label")
+                    .attr("y", arrowY - 50)
+                    .text("Found!");
+
+                // Remove indicator after 3 seconds
+                setTimeout(() => {
+                    indicator.transition()
+                        .duration(500)
+                        .style("opacity", 0)
+                        .remove();
+                }, 3000);
+            }
+            isFromSearch = false;  // Reset flag
+        }
+
+        // Update stats
+        const personCount = nodeData.filter(n => n.type === 'person').length;
+        const orgCount = nodeData.filter(n => n.type === 'org').length;
+        document.getElementById("pc").textContent = personCount;
+        document.getElementById("oc").textContent = orgCount;
+        document.getElementById("nc").textContent = nodeData.length;
+        document.getElementById("ec").textContent = linkData.length;
+
+        // Update locked node reference and show info (without hiding any nodes)
+        const selectedNode = nodeData.find(n => n.id === selectedId);
+        if (selectedNode) {
+            lockedNode = selectedNode;
+            isolateCentralNode = selectedNode;
+            // Show info for central node without hiding other nodes
+            showInfoLocked(selectedNode, selectedId);
+        }
+
+        // Zoom to fit
+        if (nodeData.length > 0) {
+            const xs = nodeData.map(n => n.x);
+            const ys = nodeData.map(n => n.y);
+            const padding = 100;
+            const minX = Math.min(...xs) - padding;
+            const maxX = Math.max(...xs) + padding;
+            const minY = Math.min(...ys) - padding;
+            const maxY = Math.max(...ys) + padding;
+
+            const boxWidth = maxX - minX;
+            const boxHeight = maxY - minY;
+            const centerX = (minX + maxX) / 2;
+            const centerY = (minY + maxY) / 2;
+
+            const scale = Math.min(
+                (width - 350) / boxWidth,
+                height / boxHeight,
+                2
+            ) * 0.9;
+
+            const transform = d3.zoomIdentity
+                .translate(width / 2 - centerX * scale, height / 2 - centerY * scale)
+                .scale(scale);
+
+            svg.transition().duration(500).call(zoom.transform, transform);
+        }
+    }
+
+    // List All Connections button - show a scrollable list of all connections
+    document.getElementById("list-connections-btn").onclick = (e) => {
+        e.stopPropagation();
+        if (!lockedNode) return;
+
+        const selectedId = lockedNode.id;
+
+        // Find all edges connected to this node from full dataset
+        const connectedEdges = allData.edges.filter(edge =>
+            edge.source === selectedId || edge.target === selectedId
+        );
+
+        // Build list of connections with details
+        const connections = connectedEdges.map(edge => {
+            const otherId = edge.source === selectedId ? edge.target : edge.source;
+            const otherNode = allData.nodes.find(n => n.id === otherId);
+            return {
+                id: otherId,
+                type: otherNode ? (otherNode.type || 'person') : 'unknown',
+                count: otherNode ? otherNode.count : 0,
+                weight: edge.weight,
+                substances: otherNode ? (otherNode.substances || []) : []
+            };
+        }).sort((a, b) => b.weight - a.weight);
+
+        // Build the list HTML
+        const listEl = document.getElementById("connections-list");
+        listEl.innerHTML = `<div style="margin-top:10px;padding-top:10px;border-top:1px solid #333;">
+            <div style="font-size:11px;color:#666;margin-bottom:8px;">
+                ${connections.length} connections (sorted by shared docs)
+            </div>
+        </div>`;
+
+        connections.forEach(conn => {
+            const typeIcon = conn.type === 'org' ? '🏢' : '👤';
+            const div = document.createElement("div");
+            div.className = "conn-item";
+            div.innerHTML = `${typeIcon} <b>${conn.id}</b> <span style="color:#888;">(${conn.weight} shared, ${conn.count} total docs)</span>`;
+            div.onclick = (ev) => {
+                ev.stopPropagation();
+                // Search ToxicDocs for both entities together
+                const query = `"${selectedId}" "${conn.id}"`;
+                const searchUrl = "https://www.toxicdocs.org/search?q=" + encodeURIComponent(query);
+                window.open(searchUrl, "_blank");
+            };
+            listEl.appendChild(div);
+        });
+    };
+    </script>
+</body>
+</html>
