@@ -1099,7 +1099,9 @@ document.getElementById("list-connections-btn").onclick = e => {
             const oid = e.source === lockedNode ? e.target : e.source;
             const on = allData.nodes.find(n => n.id === oid);
             return { id: oid, type: on?.type || 'person', weight: e.weight, count: on?.count || 0 };
-        }).sort((a,b) => b.weight - a.weight);
+        })
+        .filter(c => c.id !== "Sierra Club")  // Too ubiquitous, clutters results
+        .sort((a,b) => b.weight - a.weight);
 
     const list = document.getElementById("connections-list");
     list.innerHTML = `<div style="padding:10px 0;border-top:1px solid rgba(255,255,255,0.1);margin-top:10px;font-size:11px;color:#6b7280;">${conns.length} connections</div>`;
